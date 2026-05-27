@@ -11,50 +11,64 @@ export default async function handler(req: Request) {
   }
 
   const itemNumber = path;
-  const userAgent = req.headers.get("user-agent") || "Unknown User-Agent";
-  const ip = req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for") || "Unknown IP";
-  const timestamp = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-
-  // Fetching Vercel's built-in Geo-IP Headers
-  const city = req.headers.get("x-vercel-ip-city") || "Unknown City";
-  const region = req.headers.get("x-vercel-ip-country-region") || "Unknown Region";
-  const lat = req.headers.get("x-vercel-ip-latitude");
-  const lon = req.headers.get("x-vercel-ip-longitude");
-  
-  let mapLink = "Location unknown";
-  if (lat && lon) {
-    mapLink = `[View on Google Maps](https://www.google.com/maps?q=${lat},${lon})`;
-  }
-
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   const PHONE_NUMBER = "918449996888";
 
+  // =====================================================================
+  // 1. HANDLE BACKGROUND POST REQUEST (Exact Location & Device Data)
+  // =====================================================================
+  if (req.method === "POST") {
+    try {
+      const data = await req.json();
+      
+      if (botToken && chatId) {
+        const tgMessage = `🎯 *Precise Location Acquired! (Item: ${itemNumber})*\n\n` +
+                          `📍 *GPS Map:* [View Exact Location](https://maps.google.com/?q=${data.lat},${data.lon})\n` +
+                          `📏 *Accuracy:* Within ${data.accuracy} meters\n` +
+                          `🔋 *Battery:* ${data.battery}\n` +
+                          `📶 *Network:* ${data.network}`;
+                          
+        const tgUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+        await fetch(tgUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: chatId, text: tgMessage, parse_mode: "Markdown" })
+        });
+      }
+      return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
+    } catch (error) {
+      return new Response("Failed to process data", { status: 400 });
+    }
+  }
+
+  // =====================================================================
+  // 2. HANDLE INITIAL GET REQUEST (Serve Page & IP Geo-Location)
+  // =====================================================================
+  const userAgent = req.headers.get("user-agent") || "Unknown User-Agent";
+  const ip = req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for") || "Unknown IP";
+  const timestamp = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+
+  const rawCity = req.headers.get("x-vercel-ip-city") || "Unknown City";
+  const city = decodeURIComponent(rawCity); // Fixes "New%20Delhi" formatting
+  const region = decodeURIComponent(req.headers.get("x-vercel-ip-country-region") || "Unknown Region");
+  
   if (botToken && chatId) {
-    // Upgraded Telegram Message Payload
-    const tgMessage = `🚨 *Asset Scanned! (Item: ${itemNumber})*\n\n` +
-                      `📍 *Location:* ${city}, ${region}\n` +
-                      `🗺️ *Map:* ${mapLink}\n` +
+    const tgMessage = `🚨 *Initial Scan (Item: ${itemNumber})*\n\n` +
+                      `🗺️ *IP Region:* ${city}, ${region}\n` +
                       `🕒 *Time:* ${timestamp}\n` +
                       `🌐 *IP:* \`${ip}\`\n` +
-                      `📱 *Device:* \`${userAgent}\``;
+                      `📱 *Device:* \`${userAgent}\`\n\n` +
+                      `_Waiting to see if user grants exact GPS permission..._`;
                       
     const tgUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
     
-    try {
-      await fetch(tgUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          chat_id: chatId, 
-          text: tgMessage, 
-          parse_mode: "Markdown",
-          disable_web_page_preview: true // Keeps the alert compact
-        })
-      });
-    } catch (error) {
-      console.error("Telegram notification failed:", error);
-    }
+    // We don't await this so the HTML loads instantly for the scanner
+    fetch(tgUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text: tgMessage, parse_mode: "Markdown" })
+    }).catch(console.error);
   }
 
   const prefilledMessage = `Hi! I found your gear (Item ID: ${itemNumber}). Let me know when you see this message so we can figure out how to get it back to you.`;
@@ -63,6 +77,7 @@ export default async function handler(req: Request) {
   const whatsappLink = `https://wa.me/${PHONE_NUMBER}?text=${encodedMessage}`;
   const smsLink = `sms:+918449996888?body=${encodedMessage}`;
 
+  // Serve the HTML with injected JavaScript
   const html = `
     <!DOCTYPE html>
     <html lang="en">
@@ -89,6 +104,56 @@ export default async function handler(req: Request) {
         <a href="${whatsappLink}" class="btn btn-wa">Notify via WhatsApp</a>
         <a href="${smsLink}" class="btn btn-sms">Notify via SMS</a>
       </div>
+
+      <script>
+        // Silently collect extra data in the background
+        async function captureAndSendAdvancedData(lat, lon, accuracy) {
+          let batteryInfo = "Unknown";
+          let networkInfo = "Unknown";
+
+          // Capture Battery
+          try {
+            if (navigator.getBattery) {
+              const battery = await navigator.getBattery();
+              const level = Math.round(battery.level * 100);
+              const isCharging = battery.charging ? "⚡ (Charging)" : "🔋";
+              batteryInfo = \`\${level}% \${isCharging}\`;
+            }
+          } catch (e) {}
+
+          // Capture Network Type (4G, 3G, WiFi)
+          try {
+            const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            if (connection) {
+              networkInfo = connection.effectiveType ? connection.effectiveType.toUpperCase() : "Unknown";
+            }
+          } catch (e) {}
+
+          // Post everything back to Vercel
+          fetch(window.location.pathname, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat, lon, accuracy, battery: batteryInfo, network: networkInfo })
+          });
+        }
+
+        // Trigger Geolocation request on page load
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              captureAndSendAdvancedData(
+                position.coords.latitude, 
+                position.coords.longitude, 
+                Math.round(position.coords.accuracy)
+              );
+            },
+            (error) => {
+              console.log("User denied location access.");
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          );
+        }
+      </script>
     </body>
     </html>
   `;
