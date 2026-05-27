@@ -100,6 +100,11 @@ export default async function handler(req: Request) {
     <body>
       <div class="card">
         <h1>Thank You for Scanning!</h1>
+        
+        <div style="background-color: #eef2ff; border: 1px solid #c7d2fe; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9rem; color: #4338ca; text-align: left;">
+          <strong>📍 Help us locate this gear:</strong> Your browser might ask for location access. Allowing this securely sends the exact map coordinates to the owner so they know exactly where this was found.
+        </div>
+
         <p>You have found item code: <strong>${itemNumber}</strong>.<br>Please use a button below to notify the owner.</p>
         <a href="${whatsappLink}" class="btn btn-wa">Notify via WhatsApp</a>
         <a href="${smsLink}" class="btn btn-sms">Notify via SMS</a>
