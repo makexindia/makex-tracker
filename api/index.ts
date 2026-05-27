@@ -1,19 +1,18 @@
 export const config = {
-  runtime: 'edge', // This makes it run instantly without cold starts
+  runtime: 'edge', 
 };
 
 export default async function handler(req: Request) {
   const url = new URL(req.url);
-  const path = url.pathname.substring(1); // Grabs the item number
+  const path = url.pathname.substring(1); 
 
-  if (!path || path === "favicon.ico") {
+  // SPAM FILTER: If the path is empty, or contains anything other than digits, reject it.
+  if (!path || !/^\d+$/.test(path)) {
     return new Response("Not found", { status: 404 });
   }
 
   const itemNumber = path;
   const userAgent = req.headers.get("user-agent") || "Unknown User-Agent";
-  
-  // Vercel edge functions capture IP easily
   const ip = req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for") || "Unknown IP";
   const timestamp = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
 
@@ -23,7 +22,7 @@ export default async function handler(req: Request) {
 
   // Push to Telegram
   if (botToken && chatId) {
-    const tgMessage = `🚨 *Asset Scanned!*\n*Item:* ${itemNumber}\n*IP:* ${ip}\n*Time (IST):* ${timestamp}\n*Device/Browser:* ${userAgent}`;
+    const tgMessage = `🚨 *Asset Scanned!*\n*Item:* ${itemNumber}\n*IP:* ${ip}\n*Time (IST):* ${timestamp}\n*Device:* ${userAgent}`;
     const tgUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
     
     try {
@@ -37,8 +36,8 @@ export default async function handler(req: Request) {
     }
   }
 
-  // Generate Webpage
-  const prefilledMessage = `I found item ${itemNumber}, whenever you find this message, feel free to connect whenever you get the message.`;
+  // Generate Webpage with improved message
+  const prefilledMessage = `Hi! I found your gear (Item ID: ${itemNumber}). Let me know when you see this message so we can figure out how to get it back to you.`;
   const encodedMessage = encodeURIComponent(prefilledMessage);
   
   const whatsappLink = `https://wa.me/${PHONE_NUMBER}?text=${encodedMessage}`;
