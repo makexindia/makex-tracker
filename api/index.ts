@@ -6,7 +6,6 @@ export default async function handler(req: Request) {
   const url = new URL(req.url);
   const path = url.pathname.substring(1); 
 
-  // SPAM FILTER: If the path is empty, or contains anything other than digits, reject it.
   if (!path || !/^\d+$/.test(path)) {
     return new Response("Not found", { status: 404 });
   }
@@ -16,27 +15,48 @@ export default async function handler(req: Request) {
   const ip = req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for") || "Unknown IP";
   const timestamp = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
 
+  // Fetching Vercel's built-in Geo-IP Headers
+  const city = req.headers.get("x-vercel-ip-city") || "Unknown City";
+  const region = req.headers.get("x-vercel-ip-country-region") || "Unknown Region";
+  const lat = req.headers.get("x-vercel-ip-latitude");
+  const lon = req.headers.get("x-vercel-ip-longitude");
+  
+  let mapLink = "Location unknown";
+  if (lat && lon) {
+    mapLink = `[View on Google Maps](https://www.google.com/maps?q=${lat},${lon})`;
+  }
+
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   const PHONE_NUMBER = "918449996888";
 
-  // Push to Telegram
   if (botToken && chatId) {
-    const tgMessage = `🚨 *Asset Scanned!*\n*Item:* ${itemNumber}\n*IP:* ${ip}\n*Time (IST):* ${timestamp}\n*Device:* ${userAgent}`;
+    // Upgraded Telegram Message Payload
+    const tgMessage = `🚨 *Asset Scanned! (Item: ${itemNumber})*\n\n` +
+                      `📍 *Location:* ${city}, ${region}\n` +
+                      `🗺️ *Map:* ${mapLink}\n` +
+                      `🕒 *Time:* ${timestamp}\n` +
+                      `🌐 *IP:* \`${ip}\`\n` +
+                      `📱 *Device:* \`${userAgent}\``;
+                      
     const tgUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
     
     try {
       await fetch(tgUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text: tgMessage, parse_mode: "Markdown" })
+        body: JSON.stringify({ 
+          chat_id: chatId, 
+          text: tgMessage, 
+          parse_mode: "Markdown",
+          disable_web_page_preview: true // Keeps the alert compact
+        })
       });
     } catch (error) {
       console.error("Telegram notification failed:", error);
     }
   }
 
-  // Generate Webpage with improved message
   const prefilledMessage = `Hi! I found your gear (Item ID: ${itemNumber}). Let me know when you see this message so we can figure out how to get it back to you.`;
   const encodedMessage = encodeURIComponent(prefilledMessage);
   
