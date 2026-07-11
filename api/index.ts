@@ -14,7 +14,7 @@ export default async function handler(req: Request) {
   const itemNumber = path;
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  const PHONE_NUMBER = "918449996888";
+  const PHONE_NUMBER = "919837106272";
 
   // =====================================================================
   // 2. HANDLE BACKGROUND POST REQUEST (Exact Location & Device Data)
